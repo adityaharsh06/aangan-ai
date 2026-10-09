@@ -85,7 +85,7 @@ function questionFor(action: AgentAction, f: Facts, retry: boolean): string {
 function closeQualified(f: Facts, after: boolean): string {
   const n = firstName(f);
   const slot = f.preferred_slots.length ? ` For the consultation, I've noted: "${f.preferred_slots[f.preferred_slots.length - 1].replace(/[.\s]+$/, "")}".` : "";
-  const when = after ? " during studio hours, starting from 10am" : " shortly";
+  const when = after ? " during studio hours (from 10am)" : " shortly";
   return `Thank you${n ? `, ${n}` : ""}. I've noted everything you've told me, so you won't need to repeat it.${slot} One of our designers will call you on this number${when} to confirm the consultation. Is there anything else you'd like them to know?`;
 }
 

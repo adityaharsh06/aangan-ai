@@ -24,6 +24,7 @@ export interface TurnOutcome {
 }
 
 const PRICE_QUESTION = /how much|cost|price|pricing|\brates?\b|ballpark|\brange\b|charges?|per sq|estimate|quot(e|ation)|kitna|kharcha/i;
+const SIGN_OFF = /^\s*(no|nope|nothing|that'?s (all|it)|all good|thanks?|thank you|ok(ay)?|bye)\b/i;
 const TERMINAL: AgentAction[] = ["goodbye", "close_unqualified", "close_escalated", "close_other", "close_needs_review", "close_callback"];
 
 export function startCall(at: Date): { session: CallSession; reply: string } {
@@ -38,7 +39,10 @@ export async function callerTurn(prev: CallSession, text: string, at: Date, call
   const turns: Turn[] = [...prev.turns, { role: "caller", text: text.trim(), at: at.toISOString() }];
   const extraction = await extractFacts(turns, callStartedAt);
   const facts = mergeFacts(prev.facts, extraction.facts);
-  const factsChanged = JSON.stringify({ ...facts, pricing_asked: false }) !== JSON.stringify({ ...prev.facts, pricing_asked: false });
+  // "No, that's all" at the close adds nothing, even if the model notes it somewhere.
+  // Short replies only, so "No wait, we could finish by March" can still reopen a declined call.
+  const signOff = prev.dialogue.phase === "closing" && SIGN_OFF.test(text) && text.trim().split(/\s+/).length <= 6;
+  const factsChanged = !signOff && JSON.stringify({ ...facts, pricing_asked: false }) !== JSON.stringify({ ...prev.facts, pricing_asked: false });
   const pricingAskedThisTurn = PRICE_QUESTION.test(text);
   if (pricingAskedThisTurn) facts.pricing_asked = true;
 
