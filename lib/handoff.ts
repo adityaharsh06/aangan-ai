@@ -6,6 +6,7 @@
 import type { Facts } from "@/lib/domain/facts";
 import type { CriterionResult } from "@/lib/qualification/engine";
 import { esc } from "@/lib/providers/telegram";
+import type { BookingResult } from "@/lib/providers/integrations";
 
 export interface HandoffInput {
   enquiryId: string;
@@ -43,7 +44,7 @@ export function designerHandoffMessage(h: HandoffInput): string {
     `<i>Received ${esc(ist(h.receivedAt))}${h.afterHours ? " (after hours)" : ""}${h.responseSeconds !== null ? ` · answered in ${Math.round(h.responseSeconds)}s` : ""}</i>`,
     "",
     `<b>Caller:</b> ${v(f.caller_name)}`,
-    `<b>Phone:</b> ${esc(h.phone)}`,
+    h.phone.startsWith("vaani") ? "<b>Phone:</b> ⚠️ <i>not given (Vaani hides caller ID); use the email or the record</i>" : `<b>Phone:</b> ${esc(h.phone)}`,
     f.email ? `<b>Email:</b> ${esc(f.email)}` : null,
     `<b>Found us via:</b> ${v(f.referral_source)}`,
     "",
@@ -70,6 +71,27 @@ export function designerHandoffMessage(h: HandoffInput): string {
     h.appUrl ? `\n<a href="${esc(h.appUrl)}/enquiries/${h.enquiryId}">Full record + transcript</a>` : null,
   ];
   return lines.filter((l) => l !== null).join("\n").slice(0, 4000);
+}
+
+export function bookingMessage(h: { enquiryId: string; phone: string; name: string | null; result: BookingResult; appUrl: string | null }): string {
+  const r = h.result;
+  const lines =
+    r.outcome === "booked"
+      ? [
+          "📅 <b>CONSULTATION BOOKED</b> (Calendly)",
+          `<b>Caller:</b> ${v(h.name)} · ${esc(h.phone)}`,
+          `<b>When:</b> ${esc(r.startLabel ?? r.startTime ?? "")} IST, matched to the time the caller asked for`,
+          "The caller has been sent a Calendly invite by email. Please call to confirm the details.",
+          r.rescheduleUrl ? `<a href="${esc(r.rescheduleUrl)}">Reschedule</a>` : null,
+        ]
+      : [
+          "📅 <b>BOOKING LINK READY</b> (Calendly)",
+          `<b>Caller:</b> ${v(h.name)} · ${esc(h.phone)}`,
+          `<b>Why not booked directly:</b> ${esc(r.reason ?? "no matching slot")}`,
+          `Send the caller this one-time link to pick a time: ${esc(r.bookingUrl ?? "")}`,
+        ];
+  if (h.appUrl) lines.push(`<a href="${esc(h.appUrl)}/enquiries/${h.enquiryId}">Open record</a>`);
+  return lines.filter(Boolean).join("\n");
 }
 
 export function alertMessage(kind: "escalation" | "callback" | "missed", h: { enquiryId: string; phone: string; name: string | null; detail: string; appUrl: string | null }): string {

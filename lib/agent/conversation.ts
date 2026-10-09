@@ -6,6 +6,7 @@ import { emptyFacts, mergeFacts, type Facts } from "@/lib/domain/facts";
 import type { Evaluation } from "@/lib/qualification/engine";
 import { extractFacts, type ExtractResult } from "./extract";
 import { decide, greeting } from "./policy";
+import { calendlyConfigured } from "@/lib/providers/calendly";
 import { initialDialogueState, type AgentAction, type DialogueState, type Turn } from "./types";
 
 export interface CallSession {
@@ -35,7 +36,7 @@ export function startCall(at: Date): { session: CallSession; reply: string } {
   };
 }
 
-export async function callerTurn(prev: CallSession, text: string, at: Date, callStartedAt: Date): Promise<TurnOutcome> {
+export async function callerTurn(prev: CallSession, text: string, at: Date, callStartedAt: Date, opts: { collectEmail?: boolean } = { collectEmail: calendlyConfigured() }): Promise<TurnOutcome> {
   const turns: Turn[] = [...prev.turns, { role: "caller", text: text.trim(), at: at.toISOString() }];
   const extraction = await extractFacts(turns, callStartedAt);
   const facts = mergeFacts(prev.facts, extraction.facts);
@@ -47,7 +48,7 @@ export async function callerTurn(prev: CallSession, text: string, at: Date, call
   if (pricingAskedThisTurn) facts.pricing_asked = true;
 
   // Office-hours wording follows when the call came in, not when each sentence was said.
-  const d = decide(facts, prev.dialogue, { pricingAskedThisTurn, factsChanged, at: callStartedAt });
+  const d = decide(facts, prev.dialogue, { pricingAskedThisTurn, factsChanged, at: callStartedAt, collectEmail: opts.collectEmail });
   // Non-question closes end the call after the caller has had one chance to respond.
   const endCall = d.action === "goodbye";
   turns.push({ role: "agent", text: d.reply, at: new Date().toISOString() });

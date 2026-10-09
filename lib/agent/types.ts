@@ -20,6 +20,7 @@ export type AgentAction =
   | "ask_decision_maker"
   | "ask_name"
   | "ask_slot"
+  | "ask_email"
   | "ask_existing_details"
   | "close_qualified"
   | "close_unqualified"

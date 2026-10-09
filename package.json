@@ -1,41 +1,42 @@
 {
-    "name":  "aangan-ai",
-    "version":  "0.1.0",
-    "private":  true,
-    "description":  "Aangan AI: phone enquiry handling, qualification and designer handoff for Aangan Studio (MESA AI \u0026 Its Applications, Case 03)",
-    "scripts":  {
-                    "embed-knowledge":  "node node_modules/tsx/dist/cli.mjs scripts/embed-knowledge.mts",
-                    "predev":  "npm run embed-knowledge",
-                    "dev":  "node node_modules/next/dist/bin/next dev",
-                    "prebuild":  "npm run embed-knowledge",
-                    "build":  "node node_modules/next/dist/bin/next build",
-                    "start":  "node node_modules/next/dist/bin/next start",
-                    "lint":  "node node_modules/eslint/bin/eslint.js",
-                    "pretest":  "npm run embed-knowledge",
-                    "test":  "node node_modules/vitest/vitest.mjs run",
-                    "typecheck":  "node node_modules/typescript/bin/tsc --noEmit",
-                    "eval":  "node node_modules/tsx/dist/cli.mjs scripts/eval-transcripts.mts"
-                },
-    "dependencies":  {
-                         "@supabase/ssr":  "^0.12.7",
-                         "@supabase/supabase-js":  "^2.117.2",
-                         "lucide-react":  "^1.49.0",
-                         "next":  "16.3.8",
-                         "react":  "19.2.8",
-                         "react-dom":  "19.2.8",
-                         "server-only":  "^0.0.1",
-                         "zod":  "^4.6.5"
-                     },
-    "devDependencies":  {
-                            "@tailwindcss/postcss":  "^4",
-                            "@types/node":  "^24.19.0",
-                            "@types/react":  "^19",
-                            "@types/react-dom":  "^19",
-                            "eslint":  "^9",
-                            "eslint-config-next":  "16.3.8",
-                            "tailwindcss":  "^4",
-                            "tsx":  "^4.23.15",
-                            "typescript":  "^5",
-                            "vitest":  "^5.0.3"
-                        }
+  "name": "aangan-ai",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Aangan AI: phone enquiry handling, qualification and designer handoff for Aangan Studio (MESA AI & Its Applications, Case 03)",
+  "scripts": {
+    "embed-knowledge": "node node_modules/tsx/dist/cli.mjs scripts/embed-knowledge.mts",
+    "predev": "npm run embed-knowledge",
+    "dev": "node node_modules/next/dist/bin/next dev",
+    "prebuild": "npm run embed-knowledge",
+    "build": "node node_modules/next/dist/bin/next build",
+    "start": "node node_modules/next/dist/bin/next start",
+    "lint": "node node_modules/eslint/bin/eslint.js",
+    "pretest": "npm run embed-knowledge",
+    "test": "node node_modules/vitest/vitest.mjs run",
+    "typecheck": "node node_modules/typescript/bin/tsc --noEmit",
+    "eval": "node node_modules/tsx/dist/cli.mjs scripts/eval-transcripts.mts",
+    "calendly:event-types": "node node_modules/tsx/dist/cli.mjs scripts/calendly-event-types.mts"
+  },
+  "dependencies": {
+    "@supabase/ssr": "^0.12.7",
+    "@supabase/supabase-js": "^2.117.2",
+    "lucide-react": "^1.49.0",
+    "next": "16.3.8",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "server-only": "^0.0.1",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^24.19.0",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.8",
+    "tailwindcss": "^4",
+    "tsx": "^4.23.15",
+    "typescript": "^5",
+    "vitest": "^5.0.3"
+  }
 }

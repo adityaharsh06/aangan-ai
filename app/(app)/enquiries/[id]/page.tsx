@@ -47,6 +47,8 @@ export default async function EnquiryPage({ params }: PageProps<"/enquiries/[id]
     ["Decision-maker", f.decision_maker && f.decision_maker !== "unknown" ? `${f.decision_maker.replace("_", " ")}${f.decision_maker_note ? ` (${f.decision_maker_note})` : ""}` : NP],
     ["Budget", f.budget_volunteered ? `Volunteered: ${[f.budget_min_inr, f.budget_max_inr].filter((x) => x !== null).map((x) => fmtInr(x as number)).join(" – ")}` : "Not discussed (never probed)"],
     ["Consultation", f.preferred_slots?.length ? `${f.preferred_slots.join("; ")}${f.site_visit_requested ? " · site visit" : ""}` : NP],
+    ["Calendar", String(e.scheduling_status ?? "not_applicable").replace(/_/g, " ")],
+    ...(f.callback_phone ? ([["Call back on", f.callback_phone]] as [string, React.ReactNode][]) : []),
   ];
 
   return (

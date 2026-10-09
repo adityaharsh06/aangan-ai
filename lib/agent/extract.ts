@@ -20,7 +20,8 @@ export const FACTS_GEMINI_SCHEMA = {
   properties: {
     call_type: E(["new_enquiry", "existing_client", "follow_up", "other", "unknown"], "existing_client = already an Aangan client calling about an ongoing project; follow_up = chasing an earlier unanswered enquiry about a NEW project; other = vendor, job seeker, wrong number, spam"),
     caller_name: S("Caller's name only if they said it"),
-    email: S("Only if spoken"),
+    email: S("Only if spoken. Write it as a normal address, e.g. 'priya dot joshi at gmail dot com' → priya.joshi@gmail.com"),
+    callback_phone: S("A phone number the caller gave to be called back on, digits only with country code if said, e.g. +919822012345"),
     location_text: S("Site location exactly as described, e.g. 'Kothrud, Dahanukar Colony'"),
     location_outside_pune: B("true ONLY if the caller says the site is in a town/city other than Pune city or PCMC"),
     property_category: E(["residential", "commercial", "unknown"], ""),

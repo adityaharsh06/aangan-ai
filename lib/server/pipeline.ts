@@ -81,7 +81,7 @@ export async function handleVoiceEvent(provider: string, evt: VoiceEvent, opts: 
 
 // ------------------------------------------------------------------------------------ contacts
 
-async function upsertContact(phone: string): Promise<string> {
+export async function upsertContact(phone: string): Promise<string> {
   const db = serviceDb();
   const existing = await db.from("aangan_contacts").select("id").eq("phone", phone).maybeSingle();
   if (existing.data) return existing.data.id as string;
@@ -283,7 +283,7 @@ export async function finalise(callId: string, reason: string, endedAt = new Dat
       recommended_next_action: sum.summary.recommended_next_action,
       preferred_slots: f.preferred_slots,
       handoff_status: qualified ? "pending" : "not_required",
-      scheduling_status: qualified && f.preferred_slots.length ? "slots_captured_pending_calendar" : "not_applicable",
+      scheduling_status: qualified ? "booking_pending" : "not_applicable",
       closed_at: endedAt.toISOString(),
       updated_at: new Date().toISOString(),
     })
@@ -313,9 +313,7 @@ export async function finalise(callId: string, reason: string, endedAt = new Dat
         }),
       },
     });
-    if (f.preferred_slots.length) {
-      items.push({ enquiryId, channel: "scheduling", kind: "preferred_slots", idempotencyKey: `sched:${enquiryId}`, payload: { enquiryId, phone, name: f.caller_name, slots: f.preferred_slots, siteVisit: f.site_visit_requested } });
-    }
+    items.push(schedulingItem(enquiryId, phone, f));
   }
   if (finalStatus === "escalated") {
     items.push({ enquiryId, channel: "telegram", kind: "escalation", idempotencyKey: `escalation:${enquiryId}`, payload: { html: alertMessage("escalation", { enquiryId, phone, name: f.caller_name, detail: f.existing_project_note ?? "Existing client calling about an ongoing project.", appUrl: appUrl() }) } });
@@ -334,6 +332,17 @@ export async function finalise(callId: string, reason: string, endedAt = new Dat
 
   await enqueue(items);
   await dispatch({ enquiryId }).catch((e) => audit({ enquiryId, event: "outbox.dispatch_failed", status: "error", error: (e as Error).message }));
+}
+
+/** Book the consultation after the call (Calendly), from what the caller said. */
+function schedulingItem(enquiryId: string, phone: string, f: CallSession["facts"]): OutboxItem {
+  return {
+    enquiryId,
+    channel: "scheduling",
+    kind: "book_consultation",
+    idempotencyKey: `sched:${enquiryId}`,
+    payload: { enquiryId, phone, name: f.caller_name, email: f.email, slots: f.preferred_slots, siteVisit: f.site_visit_requested, site: f.location_text },
+  };
 }
 
 /** A manual override to "qualified" queues a handoff that the automated flow didn't send. */
@@ -358,6 +367,7 @@ export async function queueHandoffAfterOverride(enquiryId: string) {
         }),
       },
     },
+    schedulingItem(enquiryId, e.aangan_contacts?.phone ?? "unknown", f),
   ]);
   return dispatch({ enquiryId });
 }

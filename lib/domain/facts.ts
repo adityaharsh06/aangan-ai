@@ -16,6 +16,8 @@ export const FactsSchema = z.object({
   call_type: CallTypeSchema,
   caller_name: z.string().nullable(),
   email: z.string().nullable(),
+  /** A number the caller says to call back on (needed when the voice channel hides caller ID, e.g. Vaani web calls). */
+  callback_phone: z.string().nullable(),
 
   location_text: z.string().nullable(),
   /** True only when the caller states the site is in a town/city other than Pune city or PCMC. */
@@ -66,6 +68,7 @@ export function emptyFacts(): Facts {
     call_type: "unknown",
     caller_name: null,
     email: null,
+    callback_phone: null,
     location_text: null,
     location_outside_pune: false,
     property_category: "unknown",

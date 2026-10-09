@@ -41,9 +41,9 @@ export function configStatus() {
     supabase: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY && process.env.AANGAN_SERVICE_SECRET),
     gemini: Boolean(process.env.GEMINI_API_KEY?.trim()),
     telegram: Boolean(process.env.TELEGRAM_BOT_TOKEN?.trim() && process.env.TELEGRAM_DESIGNER_CHAT_ID?.trim()),
-    voice: optionalEnv("VOICE_PROVIDER", "mock"),
+    voice: process.env.VAANI_WEBHOOK_SECRET?.trim() ? "vaani" : optionalEnv("VOICE_PROVIDER", "mock"),
     crm: optionalEnv("CRM_PROVIDER", "mock"),
-    scheduling: optionalEnv("SCHEDULING_PROVIDER", "mock"),
+    scheduling: process.env.CALENDLY_TOKEN?.trim() && process.env.CALENDLY_EVENT_TYPE_URI?.trim() ? "calendly" : "mock",
     model: optionalEnv("GEMINI_MODEL", "gemini-3.8-flash"),
   };
 }

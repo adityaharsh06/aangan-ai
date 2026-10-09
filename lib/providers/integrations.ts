@@ -1,8 +1,10 @@
 /**
- * CRM (HubSpot) and scheduling (Calendly) are integrated in later phases. Until then these
- * mock adapters accept the work and report it as "not configured", so every lead is queued in
- * the outbox and can be replayed into the real systems once they are connected.
+ * CRM (HubSpot, later phase) and scheduling (Calendly). Until a system is connected its mock
+ * adapter accepts the work and reports it as "not configured", so every lead is queued in the
+ * outbox and can be replayed into the real system once it is connected.
  */
+import { calendlyConfigured, calendlyScheduling } from "./calendly";
+
 export interface CrmLead {
   enquiryId: string;
   phone: string;
@@ -27,10 +29,32 @@ export interface CRMProvider {
   upsertLead(lead: CrmLead): Promise<ProviderResult>;
 }
 
+export interface BookingRequest {
+  enquiryId: string;
+  phone: string;
+  name: string | null;
+  email: string | null;
+  /** The caller's preferred times, in their words. */
+  slots: string[];
+  siteVisit: boolean;
+  site: string | null;
+}
+
+export interface BookingResult extends ProviderResult {
+  /** "booked": a slot matching the caller's preference was booked; "link": a single-use booking link for the designer to send. */
+  outcome?: "booked" | "link";
+  startTime?: string;
+  startLabel?: string;
+  cancelUrl?: string;
+  rescheduleUrl?: string;
+  bookingUrl?: string;
+  reason?: string;
+}
+
 export interface SchedulingProvider {
   readonly name: string;
-  /** Record the caller's preferred consultation slots against the lead (no booking is promised). */
-  proposeSlots(input: { enquiryId: string; phone: string; name: string | null; slots: string[]; siteVisit: boolean }): Promise<ProviderResult>;
+  /** Book the consultation after the call, from the caller's stated preference. */
+  book(input: BookingRequest): Promise<BookingResult>;
 }
 
 export const mockCrm: CRMProvider = {
@@ -42,7 +66,7 @@ export const mockCrm: CRMProvider = {
 
 export const mockScheduling: SchedulingProvider = {
   name: "mock",
-  async proposeSlots() {
+  async book() {
     return { ok: false, notConfigured: true, error: "Scheduling integration (Calendly) not connected yet; preferred slots kept on the lead" };
   },
 };
@@ -52,5 +76,5 @@ export function getCrm(): CRMProvider {
 }
 
 export function getScheduling(): SchedulingProvider {
-  return mockScheduling;
+  return calendlyConfigured() ? calendlyScheduling : mockScheduling;
 }

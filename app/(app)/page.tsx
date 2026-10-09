@@ -188,9 +188,9 @@ export default async function Dashboard({ searchParams }: PageProps<"/">) {
             <Health ok={d.health.config.supabase} label="Database" detail="Supabase" />
             <Health ok={d.health.config.gemini} label="AI understanding" detail={d.health.config.gemini ? d.health.config.model : "Rules-only fallback active"} warn />
             <Health ok={d.health.config.telegram} label="Designer handoff" detail={d.health.config.telegram ? "Telegram connected" : "Telegram not set up; handoffs queued"} warn />
-            <Health ok={d.health.config.voice !== "mock"} label="Voice line" detail={d.health.config.voice === "mock" ? "Simulator (Vaani Labs pending)" : d.health.config.voice} pending />
+            <Health ok={d.health.config.voice !== "mock"} label="Voice line" detail={d.health.config.voice === "vaani" ? "Vaani Labs webhook connected; simulator also available" : "Simulator only (Vaani webhook secret not set)"} pending />
             <Health ok={d.health.config.crm !== "mock"} label="CRM" detail="HubSpot pending; leads queued for replay" pending />
-            <Health ok={d.health.config.scheduling !== "mock"} label="Scheduling" detail="Calendly pending; slots kept on lead" pending />
+            <Health ok={d.health.config.scheduling !== "mock"} label="Scheduling" detail={d.health.config.scheduling === "calendly" ? "Calendly: books after qualified calls" : "Calendly not set up; preferred slots kept on lead"} pending />
           </ul>
           <div className="mt-4 flex flex-wrap gap-2 text-xs">
             <Badge tone={d.health.outboxFailed ? "bad" : "good"}>{d.health.outboxFailed} failed deliveries</Badge>

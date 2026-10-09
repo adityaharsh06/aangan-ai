@@ -35,6 +35,7 @@ export const SCENARIOS: Scenario[] = [
       ask_current_state: "It still looks like the builder flat.",
       ask_decision_maker: "Yes, myself and my husband. He knows we're calling and is happy to go ahead.",
       ask_slot: "Saturday morning works, at the flat if possible.",
+      ask_email: "priya dot joshi at example dot com",
     },
   },
   {
@@ -52,6 +53,7 @@ export const SCENARIOS: Scenario[] = [
       ask_decision_maker: "Yes, it's my flat.",
       ask_name: "Rohan Kale",
       ask_slot: "Sunday afternoon.",
+      ask_email: "rohan.kale@example.com",
     },
   },
   {
@@ -113,6 +115,7 @@ export const SCENARIOS: Scenario[] = [
       ask_decision_maker: "Yes, I'm the founder, I decide.",
       ask_name: "Anand Kulkarni.",
       ask_slot: "Any weekday after 6pm.",
+      ask_email: "anand dot kulkarni at example dot com",
     },
   },
 ];

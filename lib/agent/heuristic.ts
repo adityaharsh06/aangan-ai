@@ -81,6 +81,19 @@ function findLocation(callerText: string): { text: string | null; outside: boole
 
 const YES = /^\s*(yes|yeah|yep|yup|sure|correct|right|haan|ha|ho|of course|absolutely)\b/i;
 
+/** "priya dot joshi at gmail dot com" or "priya.joshi@gmail.com" → priya.joshi@gmail.com */
+export function spokenEmail(text: string): string | null {
+  const written = text.match(/[\w.+-]+@[\w-]+(\.[\w-]+)+/);
+  if (written) return written[0].toLowerCase();
+  const s = text
+    .toLowerCase()
+    .replace(/\s+(at|@)\s+/g, "@")
+    .replace(/\s+(dot|\.)\s+/g, ".")
+    .replace(/\s+(underscore)\s+/g, "_");
+  const m = s.match(/[\w.+-]+@[\w-]+(\.[\w-]+)+/);
+  return m ? m[0] : null;
+}
+
 export function heuristicExtract(turns: Turn[], callDate: Date): Partial<Facts> {
   turns = turns.map((x) => ({ ...x, text: x.text.replace(/[‘’]/g, "'") }));
   const caller = turns.filter((x) => x.role === "caller").map((x) => x.text);
@@ -103,6 +116,10 @@ export function heuristicExtract(turns: Turn[], callDate: Date): Partial<Facts> 
     if (/your name/.test(q)) {
       const m = cur.text.match(/(?:i'?m|i am|my name is|this is|it'?s)?\s*([A-Z][a-z]+(?:\s[A-Z][a-z]+)?)/);
       if (m && !YES.test(cur.text)) f.caller_name = m[1];
+    }
+    if (/email address/.test(q)) {
+      const email = spokenEmail(cur.text);
+      if (email) f.email = email;
     }
     if (/days or times|consultation/.test(q) && !/^\s*(no|not)\b/i.test(cur.text) && /(mon|tue|wed|thu|fri|sat|sun)[a-z]*|weekend|weekday|morning|afternoon|evening|tomorrow|next week|after \d|\d\s*(am|pm)/i.test(cur.text)) {
       f.preferred_slots = [cur.text.trim()];

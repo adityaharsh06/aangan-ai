@@ -75,6 +75,8 @@ function questionFor(action: AgentAction, f: Facts, retry: boolean): string {
       return `${sorry}May I have your name, please?`;
     case "ask_slot":
       return `${sorry}A designer will meet you for a free consultation, and they can come to your site if you prefer. Which days or times suit you best?`;
+    case "ask_email":
+      return `${sorry}So we can email you a calendar invite, what's your email address? You can spell it out.`;
     case "ask_existing_details":
       return `${sorry}I'm sorry to hear that. Could you tell me your name, and which designer or project this is about?`;
     default:
@@ -82,15 +84,18 @@ function questionFor(action: AgentAction, f: Facts, retry: boolean): string {
   }
 }
 
-function closeQualified(f: Facts, after: boolean): string {
+function closeQualified(f: Facts, after: boolean, booking: boolean): string {
   const n = firstName(f);
   const slot = f.preferred_slots.length ? ` For the consultation, I've noted: "${f.preferred_slots[f.preferred_slots.length - 1].replace(/[.\s]+$/, "")}".` : "";
   const when = after ? " during studio hours (from 10am)" : " shortly";
-  return `Thank you${n ? `, ${n}` : ""}. I've noted everything you've told me, so you won't need to repeat it.${slot} One of our designers will call you on this number${when} to confirm the consultation. Is there anything else you'd like them to know?`;
+  // The booking happens after the call, so no specific time is promised here (decision 4).
+  const invite = booking && f.email ? " You'll get a calendar invite by email for the first open time that matches." : "";
+  const number = f.callback_phone ? "" : " on this number";
+  return `Thank you${n ? `, ${n}` : ""}. I've noted everything you've told me, so you won't need to repeat it.${slot}${invite} One of our designers will call you${number}${when} to confirm the consultation. Is there anything else you'd like them to know?`;
 }
 
 /** Decide the next action from the current facts. Pure: no I/O. */
-export function decide(f: Facts, prev: DialogueState, opts: { pricingAskedThisTurn: boolean; factsChanged: boolean; at: Date }): TurnDecision {
+export function decide(f: Facts, prev: DialogueState, opts: { pricingAskedThisTurn: boolean; factsChanged: boolean; at: Date; collectEmail?: boolean }): TurnDecision {
   const state: DialogueState = { ...prev, asked: { ...prev.asked }, criterionAsked: { ...prev.criterionAsked } };
   state.callerTurns += 1;
   const ev = evaluate(f, state.criterionAsked);
@@ -194,6 +199,7 @@ export function decide(f: Facts, prev: DialogueState, opts: { pricingAskedThisTu
   if (f.decision_maker === "unknown" && times("ask_decision_maker") < 1) return ask("ask_decision_maker", prefix);
   if (!f.caller_name && times("ask_name") < 1) return ask("ask_name", prefix);
   if (f.preferred_slots.length === 0 && times("ask_slot") < 1) return ask("ask_slot", prefix);
+  if (opts.collectEmail && !f.email && times("ask_email") < 1) return ask("ask_email", prefix);
 
-  return { ...done("close_qualified", `${prefix}${closeQualified(f, after)}`, "qualified"), evaluation: ev2 };
+  return { ...done("close_qualified", `${prefix}${closeQualified(f, after, Boolean(opts.collectEmail))}`, "qualified"), evaluation: ev2 };
 }
