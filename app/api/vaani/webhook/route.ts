@@ -1,26 +1,37 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { serviceDb } from "@/lib/supabase/server";
-import { parseCall, parseEnvelope, vaaniConfigured, verifyVaaniSignature } from "@/lib/providers/vaani";
+import { parseCall, parseEnvelope, vaaniConfigured, verifyVaaniRequest, VAANI_CALL_EVENTS } from "@/lib/providers/vaani";
 import { ingestVaaniCall } from "@/lib/server/vaani";
 import { audit } from "@/lib/server/audit";
 
 export const maxDuration = 60;
 
 /**
- * Vaani Labs outbound webhook. Register this URL in the Vaani dashboard; Vaani signs every event
- * with the webhook secret (VAANI_WEBHOOK_SECRET). Events are de-duplicated on their `evt_` id,
- * which Vaani reuses across retries. Any 2xx acknowledges; a 5xx makes Vaani retry with backoff.
+ * Vaani outbound webhook. Register this URL in the Vaani dashboard (Developers → Webhooks) with the
+ * same secret as VAANI_WEBHOOK_SECRET. Events are de-duplicated on their id (`<event>:<call_id>` for
+ * dashboard webhooks), which stays the same across retries. Any 2xx acknowledges; a 5xx makes Vaani retry.
  */
 export async function POST(req: NextRequest) {
   if (!vaaniConfigured()) return NextResponse.json({ error: "Vaani webhook secret not configured" }, { status: 503 });
   const raw = await req.text();
-  if (!verifyVaaniSignature(raw, req.headers.get("x-vaanivoice-signature"))) return NextResponse.json({ error: "invalid signature" }, { status: 401 });
+  const signed = verifyVaaniRequest(raw, {
+    vaani: req.headers.get("x-vaani-signature"),
+    timestamp: req.headers.get("x-vaani-timestamp"),
+    vaanivoice: req.headers.get("x-vaanivoice-signature"),
+  });
+  if (!signed) {
+    // Header names only (never values), so a signing mismatch with Vaani can be diagnosed.
+    await audit({ event: "vaani.signature_rejected", status: "warning", metadata: { headers: [...req.headers.keys()].filter((k) => k.startsWith("x-") || k === "authorization").slice(0, 30), bytes: raw.length } });
+    return NextResponse.json({ error: "invalid signature" }, { status: 401 });
+  }
 
   let env;
   try {
-    env = parseEnvelope(JSON.parse(raw));
-  } catch (e) {
-    return NextResponse.json({ error: (e as Error).message }, { status: 400 });
+    env = parseEnvelope(JSON.parse(raw), raw);
+  } catch {
+    // Signed by Vaani but not a call event (e.g. the dashboard's "Test Connectivity"): acknowledge and keep a sample.
+    await audit({ event: "vaani.unrecognised", status: "info", metadata: { sample: raw.slice(0, 2000) } });
+    return NextResponse.json({ ok: true, ignored: "unrecognised payload" });
   }
 
   const db = serviceDb();
@@ -38,7 +49,7 @@ export async function POST(req: NextRequest) {
 
   try {
     let result: unknown = { ignored: env.type };
-    if (env.type === "call.completed" || env.type === "lead.created") result = await ingestVaaniCall(parseCall(env));
+    if (VAANI_CALL_EVENTS.has(env.type)) result = await ingestVaaniCall(parseCall(env));
     await db.from("aangan_webhook_events").update({ response: result as object }).eq("provider", "vaani").eq("event_id", env.id);
     return NextResponse.json({ ok: true, result });
   } catch (e) {

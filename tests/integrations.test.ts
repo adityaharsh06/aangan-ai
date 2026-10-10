@@ -3,7 +3,7 @@ import { createHmac } from "node:crypto";
 import { matches, parsePreference, pickSlot } from "@/lib/scheduling/slot-match";
 import { spokenEmail } from "@/lib/agent/heuristic";
 import { callerTurn, startCall } from "@/lib/agent/conversation";
-import { parseCall, parseEnvelope, parseTranscript, verifyVaaniSignature } from "@/lib/providers/vaani";
+import { parseCall, parseEnvelope, parseTranscript, verifyVaaniRequest, verifyVaaniSignature } from "@/lib/providers/vaani";
 import { calendlyScheduling } from "@/lib/providers/calendly";
 
 // IST = UTC+5:30. 10 Oct 2026 is a Saturday.
@@ -108,6 +108,60 @@ describe("Vaani webhook", () => {
 
   it("rejects a body that isn't an event envelope", () => {
     expect(() => parseEnvelope({ hello: 1 })).toThrow();
+  });
+});
+
+describe("Vaani dashboard webhook (call_postprocessing)", () => {
+  const secret = "vv_whk_test";
+  // Shape from docs.vaanivoice.ai/guides/webhook-setup.md
+  const payload = {
+    event: "call_postprocessing",
+    call_id: "inbound-1791640000-abc",
+    timestamp: "2026-10-10T14:00:55.000000+00:00",
+    data: {
+      room_name: "inbound-1791640000-abc",
+      call_id: "inbound-1791640000-abc",
+      call_duration: 55150.02,
+      end_reason: "Call ended",
+      summary: "Caller wants a 3BHK in Baner done.",
+      transcript: "[13:59:59] AGENT: Hello, Aangan Studio. This is Kalyani.\n\n[14:00:05] USER: I have a 3BHK in Baner, need full design and execution.\n\n[14:00:20] AGENT: When would you need the project complete?",
+    },
+  };
+  const body = JSON.stringify(payload);
+  const ts = "1791640855";
+  const now = 1791640860;
+  const sig = `sha256=${createHmac("sha256", secret).update(`${ts}.${body}`).digest("hex")}`;
+
+  it("verifies X-Vaani-Signature over timestamp.body and refuses stale or wrong ones", () => {
+    expect(verifyVaaniRequest(body, { vaani: sig, timestamp: ts }, secret, now)).toBe(true);
+    expect(verifyVaaniRequest(body, { vaani: sig, timestamp: ts }, secret, now + 301)).toBe(false);
+    expect(verifyVaaniRequest(body + " ", { vaani: sig, timestamp: ts }, secret, now)).toBe(false);
+    expect(verifyVaaniRequest(body, { vaani: sig, timestamp: "1791640856" }, secret, now)).toBe(false);
+    expect(verifyVaaniRequest(body, {}, secret, now)).toBe(false);
+    expect(verifyVaaniRequest(body, { vaani: sig, timestamp: ts }, "", now)).toBe(false);
+  });
+
+  it("still accepts the public-API X-VaaniVoice-Signature", () => {
+    const b = JSON.stringify({ id: "evt_1", type: "call.completed", created: 1, data: {} });
+    expect(verifyVaaniRequest(b, { vaanivoice: `sha256=${createHmac("sha256", secret).update(b).digest("hex")}` }, secret)).toBe(true);
+  });
+
+  it("parses the envelope, timestamped transcript and millisecond duration", () => {
+    const env = parseEnvelope(payload, body);
+    expect(env).toMatchObject({ id: "call_postprocessing:inbound-1791640000-abc", type: "call_postprocessing" });
+    const call = parseCall(env);
+    expect(call.callId).toBe("inbound-1791640000-abc");
+    expect(call.durationSec).toBe(55);
+    expect(call.endedAt.toISOString()).toBe("2026-10-10T14:00:55.000Z");
+    expect(call.startedAt.toISOString()).toBe("2026-10-10T14:00:00.000Z");
+    expect(call.turns.map((t) => t.role)).toEqual(["agent", "caller", "agent"]);
+    expect(call.turns[1].text).toBe("I have a 3BHK in Baner, need full design and execution.");
+  });
+
+  it("gives other lifecycle events a stable id so retries de-duplicate", () => {
+    const e = { event: "call_ended", room_name: "room_1", call_duration: 42.5 };
+    expect(parseEnvelope(e).id).toBe("call_ended:room_1");
+    expect(parseEnvelope(e).id).toBe(parseEnvelope({ ...e }).id);
   });
 });
 

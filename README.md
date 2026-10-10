@@ -78,15 +78,16 @@ Copy `.env.example` to `.env.local`. Every variable is documented there. If a va
 Supabase. All objects are prefixed `aangan_` (migration in `supabase/migrations/`), and RLS is on for every table. The server pipeline authenticates with the publishable key plus an `x-aangan-service` header, whose SHA-256 hash is checked in the database. The app has no login (it is an assessment build shared only with the instructor), so every page and API route reads and writes through that server-side connection; the secret never reaches the browser. The test-call simulator is capped at 30 calls per 10 minutes. Before real callers use it, put a login back in front of it: `aangan_staff` and the staff RLS policies are still in the database.
 
 ## Voice: Vaani Labs
-Built from Vaani's published OpenAPI spec (`vaanilabs.in/openapi/v1/vaanivoice.yaml`); nothing beyond it is assumed.
-- **Vaani's agent holds the live conversation**, following the flow prompt in [`vaani/FLOW_PROMPT.md`](vaani/FLOW_PROMPT.md). A test keeps its pricing, decline and timeline lines identical to the app's.
-- **After each call** Vaani posts a signed `call.completed` event to `POST /api/vaani/webhook`. The app:
-  1. checks the `X-VaaniVoice-Signature` HMAC with `VAANI_WEBHOOK_SECRET`, and ignores a retried event id
+Built from Vaani's own docs (`docs.vaanivoice.ai/guides/webhook-setup.md`, and the signing section of `.../campaigns/webhooks.md`) and its public API spec (`vaanilabs.in/openapi/v1/vaanivoice.yaml`); nothing beyond them is assumed.
+- **Vaani's agent ("Kalyani") holds the live conversation**, following the flow prompt in [`vaani/FLOW_PROMPT.md`](vaani/FLOW_PROMPT.md), with the price-free [`vaani/aangan-knowledge-base.txt`](vaani/aangan-knowledge-base.txt) as its knowledge base. A test keeps its pricing, decline and timeline lines identical to the app's.
+- **Setup:** app.vaanivoice.ai → Developers → Webhooks → New End Point (Agent Webhook): URL `https://<app>/api/vaani/webhook`, secret = `VAANI_WEBHOOK_SECRET`, agent Kalyani, event **Call Post-Processing**.
+- **After each call** Vaani posts a signed `call_postprocessing` event (transcript ready) to `POST /api/vaani/webhook`. The app:
+  1. checks the signature (`X-Vaani-Signature` over `timestamp.body`, 5-minute window; the API spec's `X-VaaniVoice-Signature` is also accepted) and ignores a retried event (`<event>:<call_id>`)
   2. extracts facts from the whole transcript
   3. judges them with the same rules engine
   4. hands over to the same finalise step: summary, Telegram, Calendly, CRM queue
-- **Limits to know (from Vaani's spec):**
-  - The event payload's fields aren't documented, so the parser accepts several shapes, and the raw event is saved in the audit trail for tightening the mapping.
+- **Limits to know:**
+  - Vaani documents signing only for campaign webhooks, and doesn't guarantee every payload field. The parser accepts several shapes; a rejected signature is logged with header names only (`vaani.signature_rejected`), and each raw event is saved in the audit trail for tightening the mapping.
   - Vaani **masks caller numbers**, so the flow asks for a callback number.
   - Vaani's agent speaks outside our pricing guard, so its lines are checked after the call and any price mention is flagged in the audit trail (`vaani.pricing_leak`).
 - **In-app simulator:** still runs our own turn-by-turn agent through `POST /api/voice/{provider}`. The generic `mock` provider is authenticated by `VOICE_WEBHOOK_SECRET`.

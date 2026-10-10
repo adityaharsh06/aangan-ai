@@ -123,7 +123,7 @@ async function onCallStarted(provider: string, evt: Extract<VoiceEvent, { type: 
     const fresh = startCall(receivedAt);
     session = prevSession ? { ...prevSession, dialogue: { ...prevSession.dialogue, phase: "open", closeReason: null, confusion: 0 } } : fresh.session;
     const lastQuestion = [...(prevSession?.turns ?? [])].reverse().find((t) => t.role === "agent" && t.text.trim().endsWith("?"));
-    say = `Hello again, this is Aangan Studio's virtual assistant. It looks like we got cut off, but I still have what you told me.${lastQuestion && lastQuestion.text !== fresh.reply ? ` ${lastQuestion.text}` : " How can I help?"}`;
+    say = `Hello again, this is Kalyani from Aangan Studio. It looks like we got cut off, but I still have what you told me.${lastQuestion && lastQuestion.text !== fresh.reply ? ` ${lastQuestion.text}` : " How can I help?"}`;
     session.turns = [...session.turns, { role: "agent", text: say, at: new Date().toISOString() }];
     await db.from("aangan_enquiries").update({ status: "in_progress", updated_at: new Date().toISOString() }).eq("id", enquiryId);
     await audit({ enquiryId, event: "call.resumed", status: "info", metadata: { provider_call_id: evt.callId } });

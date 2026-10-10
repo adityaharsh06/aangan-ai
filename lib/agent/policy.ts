@@ -22,7 +22,7 @@ export function isAfterHours(d: Date): boolean {
 export function greeting(at: Date): string {
   const hour = Number(new Intl.DateTimeFormat("en-GB", { hour: "numeric", hour12: false, timeZone: BUSINESS.timezone }).format(at));
   const part = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
-  return `${part}, Aangan Studio. You're speaking with Aangan's virtual assistant. How can I help you today?`;
+  return `${part}, Aangan Studio. This is Kalyani, Aangan's virtual assistant. How can I help you today?`;
 }
 
 const firstName = (f: Facts) => (f.caller_name ? f.caller_name.split(" ")[0] : null);
