@@ -1,4 +1,4 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { after, NextResponse, type NextRequest } from "next/server";
 import { serviceDb } from "@/lib/supabase/server";
 import { parseCall, parseEnvelope, vaaniConfigured, verifyVaaniRequest, VAANI_CALL_EVENTS } from "@/lib/providers/vaani";
 import { ingestVaaniCall } from "@/lib/server/vaani";
@@ -37,9 +37,11 @@ export async function POST(req: NextRequest) {
   const db = serviceDb();
   const seen = await db.from("aangan_webhook_events").insert({ provider: "vaani", event_id: env.id });
   if (seen.error?.code === "23505") {
-    // Same event again: done unless the earlier attempt failed (then this retry processes it).
-    const prev = await db.from("aangan_webhook_events").select("response").eq("provider", "vaani").eq("event_id", env.id).maybeSingle();
-    if (!(prev.data?.response as { failed?: boolean } | null)?.failed) return NextResponse.json({ ok: true, duplicate: true });
+    // Same event again: done unless the earlier attempt failed, or stalled (no result after 2 minutes).
+    const prev = await db.from("aangan_webhook_events").select("response, received_at").eq("provider", "vaani").eq("event_id", env.id).maybeSingle();
+    const resp = prev.data?.response as { failed?: boolean } | null;
+    const stalled = !resp && Date.now() - new Date(String(prev.data?.received_at ?? 0)).getTime() > STALL_MS;
+    if (!resp?.failed && !stalled) return NextResponse.json({ ok: true, duplicate: true });
   } else if (seen.error) {
     return NextResponse.json({ error: "could not record event" }, { status: 500 });
   }
@@ -47,15 +49,24 @@ export async function POST(req: NextRequest) {
   // Keep what Vaani actually sent (field names + a sample), so the mapping can be tightened from real data.
   await audit({ event: `vaani.${env.type}`, status: "info", externalId: env.id, metadata: { delivery: req.headers.get("x-vaanivoice-delivery"), data_keys: Object.keys(env.data), data_sample: JSON.stringify(env.data).slice(0, 4000) } });
 
-  try {
-    let result: unknown = { ignored: env.type };
-    if (VAANI_CALL_EVENTS.has(env.type)) result = await ingestVaaniCall(parseCall(env));
-    await db.from("aangan_webhook_events").update({ response: result as object }).eq("provider", "vaani").eq("event_id", env.id);
-    return NextResponse.json({ ok: true, result });
-  } catch (e) {
-    // Mark it failed so Vaani's retry of the same event id is processed again.
-    await db.from("aangan_webhook_events").update({ response: { failed: true } }).eq("provider", "vaani").eq("event_id", env.id);
-    await audit({ event: "vaani.ingest_failed", status: "error", externalId: env.id, error: (e as Error).message });
-    return NextResponse.json({ error: "processing failed; will be retried" }, { status: 500 });
+  if (!VAANI_CALL_EVENTS.has(env.type)) {
+    await db.from("aangan_webhook_events").update({ response: { ignored: env.type } }).eq("provider", "vaani").eq("event_id", env.id);
+    return NextResponse.json({ ok: true, result: { ignored: env.type } });
   }
+
+  // Acknowledge at once (Vaani times out slow receivers and retries), then process the call. The event
+  // is already recorded, so a crash here is picked up by Vaani's retry (failed / stalled above).
+  const call = parseCall(env);
+  after(async () => {
+    try {
+      const result = await ingestVaaniCall(call);
+      await db.from("aangan_webhook_events").update({ response: result as object }).eq("provider", "vaani").eq("event_id", env.id);
+    } catch (e) {
+      await db.from("aangan_webhook_events").update({ response: { failed: true } }).eq("provider", "vaani").eq("event_id", env.id);
+      await audit({ event: "vaani.ingest_failed", status: "error", externalId: env.id, error: (e as Error).message });
+    }
+  });
+  return NextResponse.json({ ok: true, accepted: env.id });
 }
+
+const STALL_MS = 2 * 60_000;

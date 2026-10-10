@@ -62,24 +62,40 @@ class QuotaExhausted extends GeminiError {
   }
 }
 
+/** Models that just answered "overloaded" (503), skipped briefly (per server instance). */
+const overloaded = new Map<string, number>();
+const OVERLOAD_SKIP_MS = 2 * 60_000;
+
 /**
- * One structured-JSON call at temperature 0. Retries 429/5xx/network errors with backoff; if a
- * model's daily quota is used up (free tier), moves on to the next model in GEMINI_FALLBACK_MODELS.
+ * One structured-JSON call at temperature 0. Retries 429/500/network errors with backoff. Moves on
+ * to the next model in GEMINI_FALLBACK_MODELS when a model is overloaded (503), times out, keeps
+ * failing, is unknown (404), or its daily quota is used up (free tier).
  */
 export async function generateJson<T = unknown>(opts: GenerateOptions): Promise<GeminiResult<T>> {
   const now = Date.now();
-  const models = geminiModels().filter((m) => (exhausted.get(m) ?? 0) <= now);
+  const usable = geminiModels().filter((m) => (exhausted.get(m) ?? 0) <= now && (overloaded.get(m) ?? 0) <= now);
   let lastErr: GeminiError | null = null;
-  for (const model of models.length ? models : [geminiModel()]) {
+  // Whole call, across models, stays within 1.5× one request's timeout so callers (and Vercel's limit) aren't blown.
+  const deadline = now + (opts.timeoutMs ?? 20_000) * 1.5;
+  for (const model of usable.length ? usable : geminiModels()) {
+    if (lastErr && Date.now() > deadline) break;
     try {
-      return await generateWithModel<T>(model, opts);
+      const left = Math.max(3_000, deadline - Date.now());
+      return await generateWithModel<T>(model, { ...opts, timeoutMs: Math.min(opts.timeoutMs ?? 20_000, left) });
     } catch (e) {
-      if (!(e instanceof QuotaExhausted)) throw e;
-      exhausted.set(model, Date.now() + QUOTA_RETRY_MS);
-      lastErr = e;
+      if (e instanceof QuotaExhausted) exhausted.set(model, Date.now() + QUOTA_RETRY_MS);
+      else if (e instanceof Overloaded) overloaded.set(model, Date.now() + OVERLOAD_SKIP_MS);
+      else if (!(e instanceof GeminiError) || !["transient", "timeout", "config"].includes(e.kind)) throw e;
+      lastErr = e as GeminiError;
     }
   }
   throw lastErr ?? new GeminiError("transient", "Gemini unavailable");
+}
+
+class Overloaded extends GeminiError {
+  constructor(model: string) {
+    super("transient", `Gemini model ${model} is overloaded (HTTP 503)`);
+  }
 }
 
 async function generateWithModel<T>(model: string, opts: GenerateOptions): Promise<GeminiResult<T>> {
@@ -121,6 +137,8 @@ async function generateWithModel<T>(model: string, opts: GenerateOptions): Promi
         // A per-day quota won't recover with a short backoff: switch model instead.
         if (/PerDay/i.test(detail)) throw new QuotaExhausted(model);
       }
+      // "High demand" spikes don't clear in seconds: try the next model instead of waiting.
+      if (res.status === 503) throw new Overloaded(model);
       if (res.status === 429 || res.status >= 500) {
         lastErr = new GeminiError("transient", `Gemini returned HTTP ${res.status}`);
         await sleep(800 * 2 ** attempt + Math.random() * 300);
@@ -150,7 +168,9 @@ async function generateWithModel<T>(model: string, opts: GenerateOptions): Promi
       return { data, modelVersion: json?.modelVersion ?? model, usage: json?.usageMetadata, latencyMs: Date.now() - started };
     } catch (e) {
       if (e instanceof GeminiError) throw e;
-      lastErr = (e as Error).name === "AbortError" ? new GeminiError("timeout", "Gemini request timed out") : new GeminiError("transient", `Network error calling Gemini: ${(e as Error).message}`);
+      // A model that didn't answer in time is unlikely to on a retry: let the caller try the next model.
+      if ((e as Error).name === "AbortError") throw new GeminiError("timeout", `Gemini request timed out (${model})`);
+      lastErr = new GeminiError("transient", `Network error calling Gemini: ${(e as Error).message}`);
       await sleep(600 * 2 ** attempt);
     } finally {
       clearTimeout(timer);

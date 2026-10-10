@@ -23,8 +23,19 @@ const PROVIDER = "vaani";
 
 export async function ingestVaaniCall(call: VaaniCall): Promise<{ enquiryId: string; status: string } | { duplicate: true }> {
   const db = serviceDb();
-  const existing = await db.from("aangan_calls").select("enquiry_id").eq("provider", PROVIDER).eq("provider_call_id", call.callId).maybeSingle();
-  if (existing.data) return { duplicate: true };
+  const existing = await db.from("aangan_calls").select("id, enquiry_id").eq("provider", PROVIDER).eq("provider_call_id", call.callId).maybeSingle();
+  if (existing.data) {
+    // An earlier attempt was cut off before finishing (the route only retries after it has stalled for
+    // 2 minutes, past the function limit): reopen the call and finish it rather than leave it half-done.
+    const enquiryId = existing.data.enquiry_id as string;
+    const st = await db.from("aangan_enquiries").select("status").eq("id", enquiryId).single();
+    if (st.data?.status !== "in_progress") return { duplicate: true };
+    await db.from("aangan_calls").update({ status: "in_progress" }).eq("id", existing.data.id);
+    await audit({ enquiryId, callId: existing.data.id as string, event: "vaani.resumed", status: "warning", metadata: { reason: "previous attempt did not finish" } });
+    await finalise(existing.data.id as string, "completed", call.endedAt);
+    const after = await db.from("aangan_enquiries").select("status").eq("id", enquiryId).single();
+    return { enquiryId, status: String(after.data?.status ?? "in_progress") };
+  }
 
   const x = call.turns.length ? await extractFacts(call.turns, call.startedAt) : null;
   const facts = mergeFacts(emptyFacts(), x?.facts ?? {});

@@ -248,3 +248,27 @@ describe("Vaani flow prompt stays in step with the rules", () => {
     for (const s of [SCRIPTS.pricing.value, SCRIPTS.decline.value, SCRIPTS.timelineQuestion.value]) expect(doc).toContain(s);
   });
 });
+
+describe("Gemini model fallback", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  it("moves to the next model when one is overloaded (503) instead of retrying it", async () => {
+    vi.stubEnv("GEMINI_API_KEY", "test-key");
+    vi.stubEnv("GEMINI_MODEL", "busy-model");
+    vi.stubEnv("GEMINI_FALLBACK_MODELS", "healthy-model");
+    const hits: string[] = [];
+    vi.stubGlobal("fetch", async (url: string) => {
+      const model = decodeURIComponent(String(url).split("/models/")[1].split(":")[0]);
+      hits.push(model);
+      if (model === "busy-model") return new Response(JSON.stringify({ error: { code: 503, message: "high demand" } }), { status: 503 });
+      return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: '{"ok":true}' }] } }] }), { status: 200 });
+    });
+    const { generateJson } = await import("@/lib/ai/gemini");
+    const r = await generateJson<{ ok: boolean }>({ system: "s", user: "u", schema: { type: "object" } });
+    expect(r.data.ok).toBe(true);
+    expect(hits).toEqual(["busy-model", "healthy-model"]);
+  });
+});
