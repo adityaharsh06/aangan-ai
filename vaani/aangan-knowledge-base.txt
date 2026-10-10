@@ -90,4 +90,4 @@ If unsure: do not decline. Collect the details; the studio team will review.
 ==================================================
 BOOKING
 ==================================================
-Never promise a specific consultation date or time. Collect the days and times that suit the caller, their callback number (read it back) and their email (ask them to spell it). A calendar invite is emailed for the first open time that matches, and a designer calls to confirm.
+Never promise a specific consultation date or time. Collect the days and times that suit the caller, their callback number (read it back) and their email (ask them to spell it; optional). A designer calls them back to confirm a consultation time that suits them.
