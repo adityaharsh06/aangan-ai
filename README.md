@@ -1,5 +1,7 @@
 # Aangan AI
 
+**Live:** https://aangan-ai.vercel.app
+
 Phone enquiry handling for Aangan Studio, Pune (MESA AI & Its Applications, Case 03). Built in response to Nikhil Deshpande's ask: every enquiry answered within five minutes, day or night, and qualified leads reaching designers with everything already asked.
 
 **In scope:** incoming phone calls. WhatsApp and the web form are out of scope. They could reuse the same pipeline, because facts → rules → handoff doesn't depend on the channel (`aangan_enquiries.source` already allows `whatsapp | web`).
@@ -40,7 +42,7 @@ call ends   → outcome + summary → outbox: Telegram handoff / alert, CRM, sch
 - An existing-client complaint (T09) is escalated rather than qualified.
 - A caller who gets cut off and rings back within 60 minutes resumes the same enquiry (T17).
 
-**Recommended, not built yet:** HubSpot CRM (see Phases).
+**Recommended, not in this submission:** HubSpot CRM and Calendly booking (see Phases).
 
 ## Why Telegram, not email, for the designer handoff
 Leads answered within an hour convert at 4× the rate of next-day leads. Designers are often on site visits, so the note has to reach their phones as a push. Escalations need to be seen instantly. Email's one advantage, a permanent record, is already covered by the database record and the audit trail.
@@ -85,14 +87,15 @@ Built from Vaani's own docs (`docs.vaanivoice.ai/guides/webhook-setup.md`, and t
   1. checks the signature (`X-Vaani-Signature` over `timestamp.body`, 5-minute window; the API spec's `X-VaaniVoice-Signature` is also accepted) and ignores a retried event (`<event>:<call_id>`)
   2. extracts facts from the whole transcript
   3. judges them with the same rules engine
-  4. hands over to the same finalise step: summary, Telegram, Calendly, CRM queue
+  4. hands over to the same finalise step: summary, Telegram handoff, dashboard
 - **Limits to know:**
   - Vaani documents signing only for campaign webhooks, and doesn't guarantee every payload field. The parser accepts several shapes; a rejected signature is logged with header names only (`vaani.signature_rejected`), and each raw event is saved in the audit trail for tightening the mapping.
   - Vaani **masks caller numbers**, so the flow asks for a callback number.
   - Vaani's agent speaks outside our pricing guard, so its lines are checked after the call and any price mention is flagged in the audit trail (`vaani.pricing_leak`).
 - **In-app simulator:** still runs our own turn-by-turn agent through `POST /api/voice/{provider}`. The generic `mock` provider is authenticated by `VOICE_WEBHOOK_SECRET`.
 
-## Booking: Calendly
+## Booking: Calendly (optional, not part of the submitted scope)
+Not connected in the submitted build: the caller's preferred times are captured on the call and in the designer handoff, and a designer calls back to confirm. The adapter is kept for later and switches on only when `CALENDLY_TOKEN` and `CALENDLY_EVENT_TYPE_URI` are set.
 - **When it happens:** after a qualified call, as an outbox job, so a Calendly outage never loses the lead.
 - **How it books:** it reads open times for `CALENDLY_EVENT_TYPE_URI` and books the earliest one matching the caller's words ("Saturday morning", "weekdays after 6pm") through the Scheduling API (`POST /invitees`). Calendly then emails the caller an invite, and a 📅 note goes to the designers' Telegram group.
 - **When it can't book directly:** no email, no matching slot, or a Free Calendly plan (the Scheduling API needs Standard or above). It creates a one-time booking link instead and sends that to the designers. It never books a time the caller didn't ask for, and the agent never promises a specific time on the call.
@@ -101,6 +104,10 @@ Built from Vaani's own docs (`docs.vaanivoice.ai/guides/webhook-setup.md`, and t
 ## Phases
 1. ✅ Core: rules, conversation, pipeline, dashboard, simulator
 2. ✅ Gemini (with fallback models) and Telegram
-3. ✅ Deployed on Vercel (private GitHub repo, auto-deploy on push)
-4. ✅ Vaani Labs webhook + flow prompt · ✅ Calendly booking. Both need their keys and a first real event to confirm the field mapping.
-5. HubSpot (replays the `crm` outbox, dedup by phone/email)
+3. ✅ Deployed on Vercel (GitHub repo, auto-deploy on push)
+4. ✅ Vaani voice agent ("Kalyani") + webhook. **The submitted scope ends here.**
+
+Out of scope for this submission (future upgrades):
+- Calendly booking: adapter built but not connected (see above).
+- HubSpot CRM: every lead is already queued in the `crm` outbox (`crm_status = pending_integration`), so a HubSpot adapter could replay them later, with dedup by phone/email.
+- WhatsApp and the web form: the pipeline is channel-agnostic (`aangan_enquiries.source`).
