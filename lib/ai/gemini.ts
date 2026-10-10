@@ -65,6 +65,8 @@ class QuotaExhausted extends GeminiError {
 /** Models that just answered "overloaded" (503), skipped briefly (per server instance). */
 const overloaded = new Map<string, number>();
 const OVERLOAD_SKIP_MS = 2 * 60_000;
+/** A healthy Flash model answers these prompts in a few seconds; one that hasn't by now is queued behind demand. */
+const PER_MODEL_MAX_MS = 8_000;
 
 /**
  * One structured-JSON call at temperature 0. Retries 429/500/network errors with backoff. Moves on
@@ -81,10 +83,10 @@ export async function generateJson<T = unknown>(opts: GenerateOptions): Promise<
     if (lastErr && Date.now() > deadline) break;
     try {
       const left = Math.max(3_000, deadline - Date.now());
-      return await generateWithModel<T>(model, { ...opts, timeoutMs: Math.min(opts.timeoutMs ?? 20_000, left) });
+      return await generateWithModel<T>(model, { ...opts, timeoutMs: Math.min(opts.timeoutMs ?? 20_000, left, PER_MODEL_MAX_MS) });
     } catch (e) {
       if (e instanceof QuotaExhausted) exhausted.set(model, Date.now() + QUOTA_RETRY_MS);
-      else if (e instanceof Overloaded) overloaded.set(model, Date.now() + OVERLOAD_SKIP_MS);
+      else if (e instanceof Overloaded || (e instanceof GeminiError && e.kind === "timeout")) overloaded.set(model, Date.now() + OVERLOAD_SKIP_MS);
       else if (!(e instanceof GeminiError) || !["transient", "timeout", "config"].includes(e.kind)) throw e;
       lastErr = e as GeminiError;
     }
